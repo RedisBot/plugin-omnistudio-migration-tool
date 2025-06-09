@@ -1,21 +1,29 @@
 /* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/restrict-template-expressions */
 import fs from 'fs';
+import path from 'path';
 import open from 'open';
+import { Connection } from '@salesforce/core';
 import {
   ApexAssessmentInfo,
   AssessmentInfo,
   LWCAssessmentInfo,
-  OmniAssessmentInfo,
   FlexCardAssessmentInfo,
   nameLocation,
 } from '../interfaces';
-import { OSAssesmentReporter } from './OSAssessmentReporter';
+import { OrgPreferences } from '../orgpreferences';
+import { ReportHeaderFormat } from '../reportGenerator/reportInterfaces';
+import { OmnistudioOrgDetails } from '../orgUtils';
+import { OSAssessmentReporter } from './OSAssessmentReporter';
 import { IPAssessmentReporter } from './IPAssessmentReporter';
 import { DRAssessmentReporter } from './DRAssessmentReporter';
 
 export class AssessmentReporter {
-  public static async generate(result: AssessmentInfo, instanceUrl: string): Promise<void> {
+  public static async generate(
+    result: AssessmentInfo,
+    instanceUrl: string, connection: Connection,
+    omnistudioOrgDetails: OmnistudioOrgDetails
+  ): Promise<void> {
     const basePath = process.cwd() + '/assessment_reports';
     fs.mkdirSync(basePath, { recursive: true });
     const omniscriptAssessmentFilePath = basePath + '/omniscript_assessment.html';
@@ -24,10 +32,12 @@ export class AssessmentReporter {
     const dataMapperAssessmentFilePath = basePath + '/datamapper_assessment.html';
     const apexAssessmentFilePath = basePath + '/apex_assessment.html';
     const lwcAssessmentFilePath = basePath + '/lwc_assessment.html';
+    const rollbackFlagsReportPath = basePath + '/rollback_flags_report.html';
+    const orgDetails: ReportHeaderFormat[] = this.formattedOrgDetails(omnistudioOrgDetails);
 
     this.createDocument(
       omniscriptAssessmentFilePath,
-      this.generateOmniAssesment(result.omniAssessmentInfo, instanceUrl)
+      OSAssessmentReporter.generateOSAssesment(result.omniAssessmentInfo.osAssessmentInfos, instanceUrl, orgDetails)
     );
     this.createDocument(
       flexcardAssessmentFilePath,
@@ -35,7 +45,7 @@ export class AssessmentReporter {
     );
     this.createDocument(
       integrationProcedureAssessmentFilePath,
-      IPAssessmentReporter.generateIPAssesment(result.omniAssessmentInfo.ipAssessmentInfos, instanceUrl)
+      IPAssessmentReporter.generateIPAssesment(result.omniAssessmentInfo.ipAssessmentInfos, instanceUrl, orgDetails)
     );
     this.createDocument(
       dataMapperAssessmentFilePath,
@@ -43,6 +53,7 @@ export class AssessmentReporter {
     );
     this.createDocument(apexAssessmentFilePath, this.generateApexAssesment(result.apexAssessmentInfos));
     this.createDocument(lwcAssessmentFilePath, this.generateLwcAssesment(result.lwcAssessmentInfos));
+
     const nameUrls = [
       {
         name: 'omnscript assessment report',
@@ -69,7 +80,88 @@ export class AssessmentReporter {
         location: 'lwc_assessment.html',
       },
     ];
+
+    // Check rollback flags
+    const enabledFlags = await OrgPreferences.checkRollbackFlags(connection);
+    if (enabledFlags.length > 0) {
+      this.createDocument(rollbackFlagsReportPath, this.generateRollbackFlagsReport(enabledFlags));
+      nameUrls.push({
+        name: 'Rollback Flags Report',
+        location: 'rollback_flags_report.html',
+      });
+    }
+
+
     await this.createMasterDocument(nameUrls, basePath);
+    this.pushAssestUtilites('javascripts', basePath);
+    this.pushAssestUtilites('styles', basePath);
+  }
+
+  private static formattedOrgDetails(orgDetails: OmnistudioOrgDetails): ReportHeaderFormat[] {
+    return [
+      {
+        key: 'Org Name',
+        value: orgDetails.orgDetails.Name,
+      },
+      {
+        key: 'Org Id',
+        value: orgDetails.orgDetails.Id,
+      },
+      {
+        key: 'Package Name',
+        value: orgDetails.packageDetails[0].namespace,
+      },
+      {
+        key: 'Data Model',
+        value: orgDetails.dataModel,
+      },
+      {
+        key: 'Assessment Date and Time',
+        value: new Date() as unknown as string,
+      },
+    ];
+  }
+
+  /**
+   * Copies `.js` and `.css` files from a source directory (based on `folderName`)
+   * to a specified destination directory.
+   *
+   * @param folderName - The subdirectory under `/src/` where source asset files are located (e.g., `'javascripts'`, `'styles'`).
+   * @param destDir - The absolute or relative path to the destination directory where the assets should be copied.
+   *
+   * @remarks
+   * - If the destination directory does not exist, the method logs a warning and exits.
+   * - Only `.js` and `.css` files are copied.
+   * - The source files remain in place after copying.
+   */
+  private static pushAssestUtilites(folderName: string, destDir: string): void {
+    const sourceDir = path.join(process.cwd(), 'src', folderName);
+
+    if (!fs.existsSync(destDir)) {
+      // Destination directory does not exist. Skipping file copy.
+      return;
+    }
+
+    fs.readdir(sourceDir, (readDirErr, files) => {
+      if (readDirErr) {
+        // Error reading source directory: readDirErr.message
+        return;
+      }
+
+      files.forEach((file) => {
+        const ext = path.extname(file);
+        if (ext === '.js' || ext === '.css') {
+          const srcPath = path.join(sourceDir, file);
+          const destPath = path.join(destDir, file);
+
+          fs.copyFile(srcPath, destPath, (copyErr) => {
+            if (copyErr) {
+              // Failed to copy file: copyErr.message
+            }
+          });
+        }
+      });
+    });
   }
 
   private static async createMasterDocument(reports: nameLocation[], basePath: string): Promise<void> {
@@ -195,11 +287,6 @@ export class AssessmentReporter {
       </div>`;
     return tableBody;
   }
-  private static generateOmniAssesment(omniAssessmentInfo: OmniAssessmentInfo, instanceUrl: string): string {
-    let htmlBody = '';
-    htmlBody += '<br />' + OSAssesmentReporter.generateOSAssesment(omniAssessmentInfo.osAssessmentInfos, instanceUrl);
-    return htmlBody;
-  }
 
   private static generateCardAssesment(flexCardAssessmentInfos: FlexCardAssessmentInfo[], instanceUrl: string): string {
     let tableBody = '';
@@ -246,7 +333,6 @@ export class AssessmentReporter {
             </head>
             <body>
             <div style="margin: 20px;">
-                <div class="slds-text-heading_large">OmniStudio Migration Assessment </div>
                     ${resultsAsHtml}
                 </div>
             </div>
@@ -310,5 +396,20 @@ export class AssessmentReporter {
         </table>
       </div>`;
     return tableBody;
+  }
+
+  private static generateRollbackFlagsReport(enabledFlags: string[]): string {
+    return `
+      <div class="slds-box slds-theme_warning" style="margin-bottom: 20px;">
+        <div class="slds-text-heading_medium slds-m-bottom_small">⚠️ Warning: Rollback Flags Enabled</div>
+        <p>The following rollback flags are currently enabled and will be disabled during migration:</p>
+        <ul class="slds-m-top_small">
+          ${enabledFlags.map((flag) => `<li>${flag}</li>`).join('')}
+        </ul>
+        <p class="slds-m-top_small">
+          <strong>Note:</strong> These flags will not be supported after migration. For assistance, please contact support.
+        </p>
+      </div>
+    `;
   }
 }
