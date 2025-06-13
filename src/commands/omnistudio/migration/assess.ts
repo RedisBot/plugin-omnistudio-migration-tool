@@ -14,6 +14,7 @@ import { DebugTimer, DataRaptorAssessmentInfo, FlexCardAssessmentInfo } from '..
 import { Logger } from '../../../utils/logger';
 import OmnistudioRelatedObjectMigrationFacade from '../../../migration/related/OmnistudioRelatedObjectMigrationFacade';
 import { OmnistudioOrgDetails, OrgUtils } from '../../../utils/orgUtils';
+import { OrgPreferences } from '../../../utils/orgpreferences';
 
 Messages.importMessagesDirectory(__dirname);
 const messages = Messages.loadMessages('@salesforce/plugin-omnistudio-migration-tool', 'assess');
@@ -94,8 +95,8 @@ export default class Assess extends OmniStudioBaseCommand {
       flexCardAssessmentInfos,
       omniAssessmentInfo,
     };
-
-    await AssessmentReporter.generate(assesmentInfo, conn.instanceUrl, conn, orgs);
+    orgs.rollbackFlags = await OrgPreferences.checkRollbackFlags(conn);
+    await AssessmentReporter.generate(assesmentInfo, conn.instanceUrl, orgs);
     return assesmentInfo;
   }
 }

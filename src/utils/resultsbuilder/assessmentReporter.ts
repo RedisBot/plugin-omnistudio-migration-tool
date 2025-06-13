@@ -3,7 +3,6 @@
 import fs from 'fs';
 import path from 'path';
 import open from 'open';
-import { Connection } from '@salesforce/core';
 import {
   ApexAssessmentInfo,
   AssessmentInfo,
@@ -11,8 +10,7 @@ import {
   FlexCardAssessmentInfo,
   nameLocation,
 } from '../interfaces';
-import { OrgPreferences } from '../orgpreferences';
-import { ReportHeaderFormat } from '../reportGenerator/reportInterfaces';
+import { ReportHeader } from '../reportGenerator/reportInterfaces';
 import { OmnistudioOrgDetails } from '../orgUtils';
 import { OSAssessmentReporter } from './OSAssessmentReporter';
 import { IPAssessmentReporter } from './IPAssessmentReporter';
@@ -21,7 +19,7 @@ import { DRAssessmentReporter } from './DRAssessmentReporter';
 export class AssessmentReporter {
   public static async generate(
     result: AssessmentInfo,
-    instanceUrl: string, connection: Connection,
+    instanceUrl: string,
     omnistudioOrgDetails: OmnistudioOrgDetails
   ): Promise<void> {
     const basePath = process.cwd() + '/assessment_reports';
@@ -33,7 +31,7 @@ export class AssessmentReporter {
     const apexAssessmentFilePath = basePath + '/apex_assessment.html';
     const lwcAssessmentFilePath = basePath + '/lwc_assessment.html';
     const rollbackFlagsReportPath = basePath + '/rollback_flags_report.html';
-    const orgDetails: ReportHeaderFormat[] = this.formattedOrgDetails(omnistudioOrgDetails);
+    const orgDetails: ReportHeader[] = this.formattedOrgDetails(omnistudioOrgDetails);
 
     this.createDocument(
       omniscriptAssessmentFilePath,
@@ -81,8 +79,8 @@ export class AssessmentReporter {
       },
     ];
 
-    // Check rollback flags
-    const enabledFlags = await OrgPreferences.checkRollbackFlags(connection);
+    // Check rollback flags from org details
+    const enabledFlags = omnistudioOrgDetails.rollbackFlags || [];
     if (enabledFlags.length > 0) {
       this.createDocument(rollbackFlagsReportPath, this.generateRollbackFlagsReport(enabledFlags));
       nameUrls.push({
@@ -91,13 +89,12 @@ export class AssessmentReporter {
       });
     }
 
-
     await this.createMasterDocument(nameUrls, basePath);
     this.pushAssestUtilites('javascripts', basePath);
     this.pushAssestUtilites('styles', basePath);
   }
 
-  private static formattedOrgDetails(orgDetails: OmnistudioOrgDetails): ReportHeaderFormat[] {
+  private static formattedOrgDetails(orgDetails: OmnistudioOrgDetails): ReportHeader[] {
     return [
       {
         key: 'Org Name',
@@ -400,13 +397,18 @@ export class AssessmentReporter {
 
   private static generateRollbackFlagsReport(enabledFlags: string[]): string {
     return `
-      <div class="slds-box slds-theme_warning" style="margin-bottom: 20px;">
-        <div class="slds-text-heading_medium slds-m-bottom_small">⚠️ Warning: Rollback Flags Enabled</div>
+      <div class="slds-box rollback-flags-warning">
+        <div class="slds-text-heading_medium">
+          <svg class="slds-icon slds-icon_small slds-m-right_x-small" aria-hidden="true">
+            <use xlink:href="/assets/icons/utility-sprite/svg/symbols.svg#warning"></use>
+          </svg>
+          Warning: Rollback Flags Enabled
+        </div>
         <p>The following rollback flags are currently enabled and will be disabled during migration:</p>
-        <ul class="slds-m-top_small">
+        <ul>
           ${enabledFlags.map((flag) => `<li>${flag}</li>`).join('')}
         </ul>
-        <p class="slds-m-top_small">
+        <p>
           <strong>Note:</strong> These flags will not be supported after migration. For assistance, please contact support.
         </p>
       </div>

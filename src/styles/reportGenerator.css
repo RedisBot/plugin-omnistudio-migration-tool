@@ -217,3 +217,40 @@ tbody tr td {
 html {
   background: #f8f8f8;
 }
+
+.rollback-flags-warning {
+  margin-bottom: 20px;
+  padding: 16px;
+  border-radius: 4px;
+  background-color: #fff3e0;
+  border: 1px solid #ffb74d;
+}
+
+.rollback-flags-warning .slds-text-heading_medium {
+  color: #ff9800;
+  display: flex;
+  align-items: center;
+}
+
+.rollback-flags-warning .slds-icon {
+  fill: #ff9800;
+}
+
+.rollback-flags-warning ul {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.rollback-flags-warning li {
+  margin: 4px 0;
+  color: #e65100;
+}
+
+.rollback-flags-warning p {
+  margin: 8px 0;
+  color: #e65100;
+}
+
+.rollback-flags-warning strong {
+  font-weight: 600;
+}

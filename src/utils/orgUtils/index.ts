@@ -10,8 +10,21 @@ interface InstalledPackage {
   Name: string;
 }
 
+interface OrgDetails {
+  Name: string;
+  Id: string;
+}
+
 export interface OmnistudioOrgDetails {
-  packageDetails: PackageDetail[];
+  orgDetails: {
+    Id: string;
+    Name: string;
+  };
+  packageDetails: Array<{
+    namespace: string;
+  }>;
+  dataModel: string;
+  rollbackFlags?: string[];
   omniStudioOrgPermissionEnabled: boolean;
 }
 
@@ -260,6 +273,15 @@ export class OrgUtils {
   // Define the object name for querying installed packages
   private static readonly objectName = 'Publisher';
 
+
+  // Define the fields to retrieve from the Organization object
+  private static readonly orgFields = ['Name'];
+
+  // Define the object name for querying installed packages
+  private static readonly orgObjectName = 'Organization';
+
+  private static readonly standardDataModel = "Standard";
+  private static readonly customDataModel = "Custom";
   /**
    * Fetches package details (version and namespace) for specific installed packages.
    *
@@ -269,7 +291,6 @@ export class OrgUtils {
   public static async getOrgDetails(connection: Connection, namespace: string): Promise<OmnistudioOrgDetails> {
     //Execute apex rest resource to get omnistudio org permission
     const omniStudioOrgPermissionEnabled: boolean = await this.isOmniStudioOrgPermissionEnabled(connection, namespace);
-
     // Query all installed packages and cast the result to InstalledPackage[]
     const allInstalledPackages = (await QueryTools.queryAll(
       connection,
@@ -277,6 +298,13 @@ export class OrgUtils {
       this.objectName,
       this.fields
     )) as unknown as InstalledPackage[];
+
+    const orgDetails = (await QueryTools.queryAll(
+      connection,
+      '',
+      this.orgObjectName,
+      this.orgFields
+    )) as unknown as OrgDetails;
 
     const packageDetails: PackageDetail[] = allInstalledPackages
       // Filter packages to only include those with a namespace in the predefined list
@@ -290,6 +318,8 @@ export class OrgUtils {
     return {
       packageDetails: packageDetails,
       omniStudioOrgPermissionEnabled: omniStudioOrgPermissionEnabled,
+      orgDetails: orgDetails[0],
+      dataModel: omniStudioOrgPermissionEnabled ? this.standardDataModel : this.customDataModel
     };
   }
 
