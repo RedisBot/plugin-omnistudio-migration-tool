@@ -20,7 +20,7 @@ export interface Filter {
   filterOptions: string[];
 }
 
-export interface ReportHeader {
+export interface ReportHeaderFormat {
   key: string;
   value: string;
 }
